@@ -1,0 +1,10 @@
+name = "bias"
+version = "0.1.0"
+description = "bias — observation filtered through subjectivity, made structural."
+repository = { type = "github", user = "systemic-engineering", repo = "bias" }
+
+[dependencies]
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
