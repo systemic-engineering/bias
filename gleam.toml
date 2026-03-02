@@ -1,6 +1,8 @@
 name = "bias"
 version = "0.1.0"
 description = "bias — observation filtered through subjectivity, made structural."
+licences = ["Apache-2.0"]
+# Hex requires an SPDX identifier. The actual governing terms are in REAL_LICENSE.md.
 repository = { type = "github", user = "systemic-engineering", repo = "bias" }
 
 [dependencies]
