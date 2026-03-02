@@ -6,8 +6,11 @@
 
 import bias
 import bias/action
+import bias/context
 import bias/decision
 import bias/observer
+import bias/pipeline
+import bias/trace
 import gleam/list
 import gleam/string
 import gleeunit
@@ -466,4 +469,345 @@ pub fn multi_observer_pipeline_test() {
   // Tree is hashable
   let h = bias.hash_tree(tree)
   assert string.length(h) == 64
+}
+
+// ---------------------------------------------------------------------------
+// Trace: execution records
+// ---------------------------------------------------------------------------
+
+pub fn trace_new_ok_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let t = trace.new(trace.Observe(obs), "input-data", Ok("abc-hash"), [])
+  assert trace.is_ok(t)
+  assert !trace.is_error(t)
+  assert t.input == "input-data"
+  assert t.output == Ok("abc-hash")
+  assert t.nested == []
+}
+
+pub fn trace_new_error_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let err = trace.ObservationFailed("timeout")
+  let t = trace.new(trace.Observe(obs), "input-data", Error(err), [])
+  assert trace.is_error(t)
+  assert !trace.is_ok(t)
+  assert t.output == Error(trace.ObservationFailed("timeout"))
+}
+
+pub fn trace_get_result_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let t = trace.new(trace.Observe(obs), "data", Ok("result-sha"), [])
+  assert trace.get_result(t) == Ok("result-sha")
+}
+
+pub fn trace_root_causes_finds_leaf_errors_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+
+  // Leaf error trace (no nested)
+  let leaf_err = trace.new(
+    trace.Act(bias.Action(sha: "a1", target: "Alert", config: []), "Critical"),
+    "dec-sha",
+    Error(trace.ActionFailed("Alert", "connection refused")),
+    [],
+  )
+
+  // Middle trace (has nested, is error)
+  let middle = trace.new(
+    trace.Decide("scanner", "obs-sha"),
+    "obs-sha",
+    Error(trace.ActionFailed("scanner", "action failed")),
+    [leaf_err],
+  )
+
+  // Root trace
+  let root = trace.new(
+    trace.Observe(obs),
+    "data",
+    Error(trace.ObservationFailed("observer failed")),
+    [middle],
+  )
+
+  let causes = trace.root_causes(root)
+  // Only the leaf error should be a root cause
+  assert list.length(causes) == 1
+  let assert [cause] = causes
+  assert cause.input == "dec-sha"
+}
+
+pub fn trace_find_by_predicate_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let act = bias.Action(sha: "a1", target: "Alert", config: [])
+  let leaf1 = trace.new(trace.Act(act, "Critical"), "d1", Ok("a1"), [])
+  let leaf2 = trace.new(trace.Act(act, "Ignore"), "d2", Ok("a1"), [])
+  let parent = trace.new(
+    trace.Decide("scanner", "obs"),
+    "obs",
+    Ok("d1,d2"),
+    [leaf1, leaf2],
+  )
+  let root = trace.new(trace.Observe(obs), "data", Ok("obs"), [parent])
+
+  // Find all Act traces
+  let acts = trace.find(root, fn(t) {
+    case t.step {
+      trace.Act(_, _) -> True
+      _ -> False
+    }
+  })
+  assert list.length(acts) == 2
+}
+
+pub fn trace_reduce_counts_all_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let act = bias.Action(sha: "a1", target: "Alert", config: [])
+  let leaf = trace.new(trace.Act(act, "Critical"), "d1", Ok("a1"), [])
+  let parent = trace.new(trace.Decide("scanner", "obs"), "obs", Ok("d1"), [leaf])
+  let root = trace.new(trace.Observe(obs), "data", Ok("obs"), [parent])
+
+  // Count all traces: root + parent + leaf = 3
+  let count = trace.reduce(root, 0, fn(_, acc) { acc + 1 })
+  assert count == 3
+}
+
+pub fn trace_serialize_deterministic_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let t = trace.new(trace.Observe(obs), "data", Ok("result"), [])
+  let s1 = trace.serialize_trace(t)
+  let s2 = trace.serialize_trace(t)
+  assert s1 == s2
+}
+
+pub fn trace_hash_deterministic_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let t1 = trace.new(trace.Observe(obs), "data", Ok("result"), [])
+  let t2 = trace.new(trace.Observe(obs), "data", Ok("result"), [])
+  assert trace.hash_trace(t1) == trace.hash_trace(t2)
+  assert string.length(trace.hash_trace(t1)) == 64
+}
+
+pub fn trace_different_input_hash_different_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let t1 = trace.new(trace.Observe(obs), "data-1", Ok("result"), [])
+  let t2 = trace.new(trace.Observe(obs), "data-2", Ok("result"), [])
+  assert trace.hash_trace(t1) != trace.hash_trace(t2)
+}
+
+// ---------------------------------------------------------------------------
+// Context: execution state
+// ---------------------------------------------------------------------------
+
+pub fn context_new_test() {
+  let ctx = context.new("initial-data")
+  assert ctx.data == "initial-data"
+  assert ctx.history == []
+  assert ctx.metadata == []
+}
+
+pub fn context_with_metadata_test() {
+  let ctx =
+    context.new("data")
+    |> context.with_metadata("author", "reed")
+    |> context.with_metadata("timestamp", "2026-03-01")
+  assert context.get_metadata(ctx, "author") == Ok("reed")
+  assert context.get_metadata(ctx, "timestamp") == Ok("2026-03-01")
+}
+
+pub fn context_get_metadata_not_found_test() {
+  let ctx = context.new("data")
+  assert context.get_metadata(ctx, "missing") == Error(Nil)
+}
+
+pub fn context_advance_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let t = trace.new(trace.Observe(obs), "old-data", Ok("new-sha"), [])
+  let ctx = context.new("old-data")
+  let advanced = context.advance(ctx, "new-sha", t)
+  assert advanced.data == "new-sha"
+  assert list.length(advanced.history) == 1
+}
+
+pub fn context_with_history_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let t = trace.new(trace.Observe(obs), "data", Ok("sha"), [])
+  let ctx =
+    context.new("data")
+    |> context.with_history([t])
+  assert list.length(ctx.history) == 1
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline: run_tree -- full execution with tracing
+// ---------------------------------------------------------------------------
+
+pub fn run_tree_single_observer_test() {
+  let observable = bias.Observable(
+    sha: "commit-abc",
+    kind: "git.commit",
+    source: "bias",
+  )
+  let obs = sample_observer()
+  let tree = bias.Tree(sha: "", observable: observable, observers: [obs])
+
+  let result_trace = pipeline.run_tree(tree, "raw-data", fn(_, _) {
+    Ok([decision.variant("Critical")])
+  })
+
+  // Root is an Observe trace
+  assert trace.is_ok(result_trace)
+  // One nested Decide trace
+  assert list.length(result_trace.nested) == 1
+  let assert [decide_trace] = result_trace.nested
+  // Decide trace has one Act trace (Critical -> Alert)
+  assert trace.is_ok(decide_trace)
+  assert list.length(decide_trace.nested) == 1
+  let assert [act_trace] = decide_trace.nested
+  assert trace.is_ok(act_trace)
+}
+
+pub fn run_tree_multi_observer_test() {
+  let observable = bias.Observable(
+    sha: "commit-xyz",
+    kind: "git.commit",
+    source: "bias",
+  )
+
+  let scanner = sample_observer()
+
+  let pass = decision.variant("Pass")
+  let fail = decision.variant("Fail")
+  let noop = action.new("Noop", [])
+  let retry = action.new("Retry", [#("attempts", "3")])
+  let assert Ok(health) = observer.new(
+    "health-check",
+    [pass, fail],
+    [action.for_variant("Pass", [noop]), action.for_variant("Fail", [retry])],
+  )
+
+  let tree = bias.Tree(
+    sha: "",
+    observable: observable,
+    observers: [scanner, health],
+  )
+
+  let result_trace = pipeline.run_tree(tree, "raw-data", fn(obs, _) {
+    case obs.id {
+      "security-scanner" -> Ok([decision.variant("Critical")])
+      "health-check" -> Ok([decision.variant("Fail")])
+      _ -> Error("unknown observer")
+    }
+  })
+
+  // Root is Ok (both observers succeed)
+  assert trace.is_ok(result_trace)
+  // Two nested Decide traces
+  assert list.length(result_trace.nested) == 2
+}
+
+pub fn run_tree_error_propagation_test() {
+  let observable = bias.Observable(
+    sha: "abc",
+    kind: "git.commit",
+    source: "repo",
+  )
+  let obs = sample_observer()
+  let tree = bias.Tree(sha: "", observable: observable, observers: [obs])
+
+  // Decision function fails
+  let result_trace = pipeline.run_tree(tree, "data", fn(_, _) {
+    Error("decision function crashed")
+  })
+
+  // Root should be error
+  assert trace.is_error(result_trace)
+  // root_causes should find the leaf error
+  let causes = trace.root_causes(result_trace)
+  assert list.length(causes) == 1
+}
+
+pub fn run_tree_trace_nesting_mirrors_tree_test() {
+  let observable = bias.Observable(
+    sha: "abc",
+    kind: "git.commit",
+    source: "bias",
+  )
+  let obs = sample_observer()
+  let tree = bias.Tree(sha: "", observable: observable, observers: [obs])
+
+  // Critical has 1 action (Alert), Ignore has 1 action (Log)
+  // Decide both variants -> 2 Act traces
+  let result_trace = pipeline.run_tree(tree, "data", fn(_, _) {
+    Ok([decision.variant("Critical"), decision.variant("Ignore")])
+  })
+
+  assert trace.is_ok(result_trace)
+  // 1 observer -> 1 Decide trace
+  assert list.length(result_trace.nested) == 1
+  let assert [decide_trace] = result_trace.nested
+  // 2 decisions -> 2 Act traces
+  assert list.length(decide_trace.nested) == 2
+}
+
+pub fn run_tree_deterministic_hash_test() {
+  let observable = bias.Observable(
+    sha: "commit-abc",
+    kind: "git.commit",
+    source: "bias",
+  )
+  let obs = sample_observer()
+  let tree = bias.Tree(sha: "", observable: observable, observers: [obs])
+
+  let decide = fn(_, _) { Ok([decision.variant("Critical")]) }
+  let trace1 = pipeline.run_tree(tree, "data", decide)
+  let trace2 = pipeline.run_tree(tree, "data", decide)
+
+  // Same tree + same decisions = same trace hash
+  assert trace.hash_trace(trace1) == trace.hash_trace(trace2)
+}
+
+pub fn run_tree_exhaustiveness_gap_test() {
+  let observable = bias.Observable(
+    sha: "abc",
+    kind: "git.commit",
+    source: "repo",
+  )
+  let obs = sample_observer()
+  let tree = bias.Tree(sha: "", observable: observable, observers: [obs])
+
+  // Return a decision variant with no action mapping
+  let result_trace = pipeline.run_tree(tree, "data", fn(_, _) {
+    Ok([bias.Decision(sha: "fake", variant: "Nonexistent", payload: [])])
+  })
+
+  // The Act trace should have an ExhaustivenessGap error
+  assert trace.is_error(result_trace)
+  let causes = trace.root_causes(result_trace)
+  assert list.length(causes) == 1
+  let assert [cause] = causes
+  assert cause.output
+    == Error(trace.ExhaustivenessGap("security-scanner", "Nonexistent"))
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline: composition
+// ---------------------------------------------------------------------------
+
+pub fn pipeline_new_test() {
+  let p = pipeline.new("test-pipeline")
+  assert p.name == "test-pipeline"
+  assert p.steps == []
+}
+
+pub fn pipeline_add_step_test() {
+  let obs = bias.Observable(sha: "abc", kind: "git.commit", source: "repo")
+  let p =
+    pipeline.new("test")
+    |> pipeline.add_step(pipeline.PipelineObserve(obs))
+  assert list.length(p.steps) == 1
+}
+
+pub fn pipeline_chain_test() {
+  let a = pipeline.new("first")
+  let b = pipeline.new("second")
+  let chained = pipeline.chain(a, b)
+  assert chained.name == "first"
 }
