@@ -1,6 +1,5 @@
-*.beam
-*.ez
-/build
+target/
+.nix-cargo/
+.claude/
+.direnv/
 erl_crash.dump
-.direnv/flake-profile*
-.direnv/flake-inputs*
