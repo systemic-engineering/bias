@@ -6,6 +6,7 @@
 use bias::action;
 use bias::context;
 use bias::decision;
+use bias::encoder::{DefaultEncoder, Encoder};
 use bias::observable::{self, Observable};
 use bias::observer::{self, Observer, ObserverError};
 use bias::pipeline;
@@ -1020,4 +1021,92 @@ fn pipeline_chain() {
     let b = pipeline::new("second");
     let chained = pipeline::chain(a, b);
     assert_eq!(chained.name, "first");
+}
+
+// ---------------------------------------------------------------------------
+// Encoder: pluggable serialization
+// ---------------------------------------------------------------------------
+
+#[test]
+fn default_encoder_serialize_observable_matches() {
+    let obs = Observable::new("abc", "git.commit", "repo");
+    let enc = DefaultEncoder;
+    assert_eq!(enc.serialize_observable(&obs), observable::serialize(&obs));
+}
+
+#[test]
+fn default_encoder_hash_observable_matches() {
+    let obs = Observable::new("abc", "git.commit", "repo");
+    let enc = DefaultEncoder;
+    assert_eq!(enc.hash_observable(&obs), observable::hash(&obs));
+}
+
+#[test]
+fn default_encoder_serialize_decision_matches() {
+    let dec = decision::new("Critical", vec![("severity".into(), "high".into())]);
+    let enc = DefaultEncoder;
+    assert_eq!(enc.serialize_decision(&dec), decision::serialize(&dec));
+}
+
+#[test]
+fn default_encoder_serialize_action_matches() {
+    let act = action::new("Alert", vec![("channel".into(), "ntfy".into())]);
+    let enc = DefaultEncoder;
+    assert_eq!(enc.serialize_action(&act), action::serialize_action(&act));
+}
+
+#[test]
+fn default_encoder_serialize_observer_matches() {
+    let obs = sample_observer();
+    let enc = DefaultEncoder;
+    assert_eq!(enc.serialize_observer(&obs), observer::serialize(&obs));
+}
+
+#[test]
+fn default_encoder_serialize_tree_matches() {
+    let t = tree::Tree {
+        sha: String::new(),
+        observable: Observable::new("abc", "git.commit", "repo"),
+        observers: vec![sample_observer()],
+    };
+    let enc = DefaultEncoder;
+    assert_eq!(enc.serialize_tree(&t), tree::serialize(&t));
+}
+
+#[test]
+fn new_with_default_encoder_same_as_new() {
+    let enc = DefaultEncoder;
+    let a = decision::new("Critical", vec![("severity".into(), "high".into())]);
+    let b = decision::new_with(&enc, "Critical", vec![("severity".into(), "high".into())]);
+    assert_eq!(a.sha, b.sha);
+}
+
+#[test]
+fn different_encoder_produces_different_hash() {
+    /// A test encoder that prefixes all serializations.
+    struct TestEncoder;
+    impl Encoder for TestEncoder {
+        fn serialize_observable(&self, obs: &Observable) -> String {
+            format!("test:{}", observable::serialize(obs))
+        }
+        fn serialize_decision(&self, dec: &bias::decision::Decision) -> String {
+            format!("test:{}", decision::serialize(dec))
+        }
+        fn serialize_action(&self, act: &bias::action::Action) -> String {
+            format!("test:{}", action::serialize_action(act))
+        }
+        fn serialize_decision_actions(&self, da: &bias::action::DecisionActions) -> String {
+            format!("test:{}", action::serialize_decision_actions(da))
+        }
+        fn serialize_observer(&self, obs: &Observer) -> String {
+            format!("test:{}", observer::serialize(obs))
+        }
+        fn serialize_tree(&self, t: &tree::Tree) -> String {
+            format!("test:{}", tree::serialize(t))
+        }
+    }
+
+    let dec_default = decision::new("Critical", vec![]);
+    let dec_test = decision::new_with(&TestEncoder, "Critical", vec![]);
+    assert_ne!(dec_default.sha, dec_test.sha);
 }

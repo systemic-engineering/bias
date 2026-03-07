@@ -1,4 +1,5 @@
 use crate::decision::Decision;
+use crate::encoder::Encoder;
 use crate::observer::Observer;
 use crate::sha::{self, Sha};
 
@@ -26,6 +27,11 @@ pub fn new(target: &str, config: Vec<(String, String)>) -> Action {
     };
     let sha = hash(&act);
     Action { sha: sha.0, ..act }
+}
+
+/// Build a new Action with SHA computed by a custom encoder.
+pub fn new_with(_encoder: &dyn Encoder, _target: &str, _config: Vec<(String, String)>) -> Action {
+    todo!()
 }
 
 /// Build a DecisionActions mapping.

@@ -1,5 +1,6 @@
 use crate::action::{self, Action, DecisionActions};
 use crate::decision::{self, Decision};
+use crate::encoder::Encoder;
 use crate::observable::Observable;
 use crate::sha::{self, Sha};
 
@@ -43,6 +44,17 @@ pub fn new(
         sha: sha.0,
         ..observer
     })
+}
+
+/// Build a new observer with SHA computed by a custom encoder.
+/// Validates exhaustiveness: every decision variant must have actions.
+pub fn new_with(
+    _encoder: &dyn Encoder,
+    _id: &str,
+    _decisions: Vec<Decision>,
+    _actions: Vec<DecisionActions>,
+) -> Result<Observer, ObserverError> {
+    todo!()
 }
 
 /// Apply an observer to an observable, producing decisions.

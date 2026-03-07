@@ -1,3 +1,4 @@
+use crate::encoder::Encoder;
 use crate::sha::{self, Sha};
 
 /// A typed variant produced by an observer's decision function.
@@ -21,9 +22,19 @@ pub fn new(variant: &str, payload: Vec<(String, String)>) -> Decision {
     Decision { sha: sha.0, ..dec }
 }
 
+/// Build a new Decision with SHA computed by a custom encoder.
+pub fn new_with(_encoder: &dyn Encoder, _variant: &str, _payload: Vec<(String, String)>) -> Decision {
+    todo!()
+}
+
 /// Build a Decision with no payload.
 pub fn variant(name: &str) -> Decision {
     new(name, vec![])
+}
+
+/// Build a Decision with no payload, SHA computed by a custom encoder.
+pub fn variant_with(_encoder: &dyn Encoder, _name: &str) -> Decision {
+    todo!()
 }
 
 /// Extract the variant name from a decision.

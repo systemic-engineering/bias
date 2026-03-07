@@ -1,6 +1,7 @@
 pub mod action;
 pub mod context;
 pub mod decision;
+pub mod encoder;
 pub mod observable;
 pub mod observer;
 pub mod pipeline;
