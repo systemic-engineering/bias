@@ -49,12 +49,25 @@ pub fn new(
 /// Build a new observer with SHA computed by a custom encoder.
 /// Validates exhaustiveness: every decision variant must have actions.
 pub fn new_with(
-    _encoder: &dyn Encoder,
-    _id: &str,
-    _decisions: Vec<Decision>,
-    _actions: Vec<DecisionActions>,
+    encoder: &dyn Encoder,
+    id: &str,
+    decisions: Vec<Decision>,
+    actions: Vec<DecisionActions>,
 ) -> Result<Observer, ObserverError> {
-    todo!()
+    if let Err(missing) = validate_exhaustive(&decisions, &actions) {
+        return Err(ObserverError::MissingActions(missing));
+    }
+    let observer = Observer {
+        sha: String::new(),
+        id: id.to_string(),
+        decisions,
+        actions,
+    };
+    let sha = encoder.hash_observer(&observer);
+    Ok(Observer {
+        sha: sha.0,
+        ..observer
+    })
 }
 
 /// Apply an observer to an observable, producing decisions.

@@ -30,8 +30,14 @@ pub fn new(target: &str, config: Vec<(String, String)>) -> Action {
 }
 
 /// Build a new Action with SHA computed by a custom encoder.
-pub fn new_with(_encoder: &dyn Encoder, _target: &str, _config: Vec<(String, String)>) -> Action {
-    todo!()
+pub fn new_with(encoder: &dyn Encoder, target: &str, config: Vec<(String, String)>) -> Action {
+    let act = Action {
+        sha: String::new(),
+        target: target.to_string(),
+        config,
+    };
+    let sha = encoder.hash_action(&act);
+    Action { sha: sha.0, ..act }
 }
 
 /// Build a DecisionActions mapping.

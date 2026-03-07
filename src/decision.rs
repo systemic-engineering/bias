@@ -23,8 +23,14 @@ pub fn new(variant: &str, payload: Vec<(String, String)>) -> Decision {
 }
 
 /// Build a new Decision with SHA computed by a custom encoder.
-pub fn new_with(_encoder: &dyn Encoder, _variant: &str, _payload: Vec<(String, String)>) -> Decision {
-    todo!()
+pub fn new_with(encoder: &dyn Encoder, variant: &str, payload: Vec<(String, String)>) -> Decision {
+    let dec = Decision {
+        sha: String::new(),
+        variant: variant.to_string(),
+        payload,
+    };
+    let sha = encoder.hash_decision(&dec);
+    Decision { sha: sha.0, ..dec }
 }
 
 /// Build a Decision with no payload.
@@ -33,8 +39,8 @@ pub fn variant(name: &str) -> Decision {
 }
 
 /// Build a Decision with no payload, SHA computed by a custom encoder.
-pub fn variant_with(_encoder: &dyn Encoder, _name: &str) -> Decision {
-    todo!()
+pub fn variant_with(encoder: &dyn Encoder, name: &str) -> Decision {
+    new_with(encoder, name, vec![])
 }
 
 /// Extract the variant name from a decision.
