@@ -14,10 +14,15 @@ pub struct Tree {
 /// Serialize a Tree to canonical form.
 /// Format: Tree(Observable(...), observers[Observer(...) | Observer(...)])
 pub fn serialize(tree: &Tree) -> String {
-    todo!("implement Tree serialization")
+    let observers: Vec<String> = tree.observers.iter().map(observer::serialize).collect();
+    format!(
+        "Tree({}, observers[{}])",
+        observable::serialize(&tree.observable),
+        observers.join(" | ")
+    )
 }
 
 /// Compute the content hash for a Tree.
 pub fn hash(tree: &Tree) -> Sha {
-    todo!("implement Tree hashing")
+    sha::hash(&serialize(tree))
 }

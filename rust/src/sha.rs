@@ -6,5 +6,8 @@ pub struct Sha(pub String);
 
 /// Raw SHA-256 hash of a string.
 pub fn hash(data: &str) -> Sha {
-    todo!("implement SHA-256 hashing")
+    let mut hasher = Sha256::new();
+    hasher.update(data.as_bytes());
+    let result = hasher.finalize();
+    Sha(hex::encode(result))
 }

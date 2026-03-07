@@ -50,32 +50,44 @@ pub fn new(
     output: Result<String, TraceError>,
     nested: Vec<Trace>,
 ) -> Trace {
-    todo!("implement Trace construction")
+    Trace {
+        step,
+        input: input.to_string(),
+        output,
+        nested,
+    }
 }
 
 /// Is this trace's output Ok?
 pub fn is_ok(trace: &Trace) -> bool {
-    todo!("implement is_ok")
+    trace.output.is_ok()
 }
 
 /// Is this trace's output an Error?
 pub fn is_error(trace: &Trace) -> bool {
-    todo!("implement is_error")
+    trace.output.is_err()
 }
 
 /// Extract the Result from a trace.
 pub fn get_result(trace: &Trace) -> &Result<String, TraceError> {
-    todo!("implement get_result")
+    &trace.output
 }
 
 /// Find root causes: leaf error traces with no nested traces.
 pub fn root_causes(trace: &Trace) -> Vec<&Trace> {
-    todo!("implement root_causes")
+    find(trace, &|t| is_error(t) && t.nested.is_empty())
 }
 
 /// Recursively find all traces matching a predicate.
 pub fn find<'a>(trace: &'a Trace, predicate: &dyn Fn(&Trace) -> bool) -> Vec<&'a Trace> {
-    todo!("implement find")
+    let mut results = Vec::new();
+    if predicate(trace) {
+        results.push(trace);
+    }
+    for nested in &trace.nested {
+        results.extend(find(nested, predicate));
+    }
+    results
 }
 
 /// Fold over the trace and all nested traces.
@@ -83,25 +95,66 @@ pub fn reduce<A, F>(trace: &Trace, acc: A, fun: &F) -> A
 where
     F: Fn(&Trace, A) -> A,
 {
-    todo!("implement reduce")
+    let new_acc = fun(trace, acc);
+    trace.nested.iter().fold(new_acc, |a, t| reduce(t, a, fun))
 }
 
 /// Serialize a Step to canonical form.
 pub fn serialize_step(step: &Step) -> String {
-    todo!("implement Step serialization")
+    match step {
+        Step::Observe(obs) => format!("Observe({})", observable::serialize(obs)),
+        Step::Decide {
+            observer_id,
+            observable_sha,
+        } => format!("Decide({}, {})", observer_id, observable_sha),
+        Step::Act {
+            action: act,
+            decision_variant,
+        } => format!(
+            "Act({}, {})",
+            action::serialize_action(act),
+            decision_variant
+        ),
+    }
 }
 
 /// Serialize a TraceError to canonical form.
 pub fn serialize_error(err: &TraceError) -> String {
-    todo!("implement TraceError serialization")
+    match err {
+        TraceError::ObservationFailed(reason) => {
+            format!("ObservationFailed({})", reason)
+        }
+        TraceError::DecisionFailed {
+            observer_id,
+            reason,
+        } => format!("DecisionFailed({}, {})", observer_id, reason),
+        TraceError::ActionFailed { target, reason } => {
+            format!("ActionFailed({}, {})", target, reason)
+        }
+        TraceError::ExhaustivenessGap {
+            observer_id,
+            variant,
+        } => format!("ExhaustivenessGap({}, {})", observer_id, variant),
+    }
 }
 
 /// Serialize a Trace to deterministic canonical form.
 pub fn serialize_trace(trace: &Trace) -> String {
-    todo!("implement Trace serialization")
+    let output_str = match &trace.output {
+        Ok(sha) => format!("Ok({})", sha),
+        Err(err) => format!("Error({})", serialize_error(err)),
+    };
+    let nested_str: Vec<String> = trace.nested.iter().map(serialize_trace).collect();
+    format!(
+        "Trace({}, {}, {}, [{}])",
+        serialize_step(&trace.step),
+        trace.input,
+        output_str,
+        nested_str.join(", ")
+    )
 }
 
 /// Content-address a trace. Same execution = same hash.
 pub fn hash_trace(trace: &Trace) -> Sha {
-    todo!("implement Trace hashing")
+    sha::hash(&serialize_trace(trace))
 }

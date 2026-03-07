@@ -315,10 +315,7 @@ fn dispatch_returns_none_for_unknown_variant() {
 #[test]
 fn dispatch_all() {
     let obs = sample_observer();
-    let decisions = vec![
-        decision::variant("Critical"),
-        decision::variant("Ignore"),
-    ];
+    let decisions = vec![decision::variant("Critical"), decision::variant("Ignore")];
     let actions = action::dispatch_all(&obs, &decisions);
     assert_eq!(actions.len(), 2);
     let targets: Vec<&str> = actions.iter().map(|a| a.target.as_str()).collect();
@@ -543,8 +540,9 @@ fn multi_observer_pipeline() {
         observers: vec![scanner.clone(), health.clone()],
     };
 
-    let scanner_decisions =
-        observer::observe(&scanner, &t.observable, |_| vec![decision::variant("Ignore")]);
+    let scanner_decisions = observer::observe(&scanner, &t.observable, |_| {
+        vec![decision::variant("Ignore")]
+    });
     let health_decisions =
         observer::observe(&health, &t.observable, |_| vec![decision::variant("Fail")]);
 
@@ -586,12 +584,7 @@ fn trace_new_ok() {
 fn trace_new_error() {
     let obs = Observable::new("abc", "git.commit", "repo");
     let err = trace::TraceError::ObservationFailed("timeout".to_string());
-    let t = trace::new(
-        trace::Step::Observe(obs),
-        "input-data",
-        Err(err),
-        vec![],
-    );
+    let t = trace::new(trace::Step::Observe(obs), "input-data", Err(err), vec![]);
     assert!(trace::is_error(&t));
     assert!(!trace::is_ok(&t));
     assert_eq!(
@@ -812,10 +805,7 @@ fn context_with_metadata() {
     let ctx = context::with_metadata(ctx, "author", "reed");
     let ctx = context::with_metadata(ctx, "timestamp", "2026-03-01");
     assert_eq!(context::get_metadata(&ctx, "author"), Some("reed"));
-    assert_eq!(
-        context::get_metadata(&ctx, "timestamp"),
-        Some("2026-03-01")
-    );
+    assert_eq!(context::get_metadata(&ctx, "timestamp"), Some("2026-03-01"));
 }
 
 #[test]

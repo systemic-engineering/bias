@@ -29,7 +29,20 @@ pub fn new(
     decisions: Vec<Decision>,
     actions: Vec<DecisionActions>,
 ) -> Result<Observer, ObserverError> {
-    todo!("implement Observer construction with exhaustiveness validation")
+    if let Err(missing) = validate_exhaustive(&decisions, &actions) {
+        return Err(ObserverError::MissingActions(missing));
+    }
+    let observer = Observer {
+        sha: String::new(),
+        id: id.to_string(),
+        decisions,
+        actions,
+    };
+    let sha = hash(&observer);
+    Ok(Observer {
+        sha: sha.0,
+        ..observer
+    })
 }
 
 /// Apply an observer to an observable, producing decisions.
@@ -37,36 +50,95 @@ pub fn observe<F>(observer: &Observer, observable: &Observable, decide: F) -> Ve
 where
     F: Fn(&Observable) -> Vec<Decision>,
 {
-    todo!("implement observe")
+    let _ = observer;
+    decide(observable)
 }
 
 /// Look up the actions for a specific decision variant.
 pub fn actions_for<'a>(observer: &'a Observer, variant: &str) -> Option<&'a [Action]> {
-    todo!("implement actions_for")
+    observer
+        .actions
+        .iter()
+        .find(|da| da.variant == variant)
+        .map(|da| da.actions.as_slice())
 }
 
 /// Extract all decision variant names from an observer.
 pub fn decision_variants(observer: &Observer) -> Vec<&str> {
-    todo!("implement decision_variants")
+    observer
+        .decisions
+        .iter()
+        .map(|d| d.variant.as_str())
+        .collect()
 }
 
 /// Extract all action targets across all decisions.
 pub fn action_targets(observer: &Observer) -> Vec<&str> {
-    todo!("implement action_targets")
+    observer
+        .actions
+        .iter()
+        .flat_map(|da| da.actions.iter().map(|a| a.target.as_str()))
+        .collect()
 }
 
 /// Check whether an observer is exhaustive.
 pub fn is_exhaustive(observer: &Observer) -> bool {
-    todo!("implement is_exhaustive")
+    validate_exhaustive(&observer.decisions, &observer.actions).is_ok()
+        && validate_no_orphans(&observer.decisions, &observer.actions).is_ok()
 }
 
 /// Serialize an Observer to canonical form.
 /// Format: Observer(id, decisions[D1 | D2], actions[DA1 | DA2])
 pub fn serialize(obs: &Observer) -> String {
-    todo!("implement Observer serialization")
+    let decisions: Vec<String> = obs.decisions.iter().map(decision::serialize).collect();
+    let actions: Vec<String> = obs
+        .actions
+        .iter()
+        .map(action::serialize_decision_actions)
+        .collect();
+    format!(
+        "Observer({}, decisions[{}], actions[{}])",
+        obs.id,
+        decisions.join(" | "),
+        actions.join(" | ")
+    )
 }
 
 /// Compute the content hash for an Observer.
 pub fn hash(obs: &Observer) -> Sha {
-    todo!("implement Observer hashing")
+    sha::hash(&serialize(obs))
+}
+
+fn validate_exhaustive(
+    decisions: &[Decision],
+    actions: &[DecisionActions],
+) -> Result<(), Vec<String>> {
+    let action_variants: Vec<&str> = actions.iter().map(|da| da.variant.as_str()).collect();
+    let missing: Vec<String> = decisions
+        .iter()
+        .filter(|d| !action_variants.contains(&d.variant.as_str()))
+        .map(|d| d.variant.clone())
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(missing)
+    }
+}
+
+fn validate_no_orphans(
+    decisions: &[Decision],
+    actions: &[DecisionActions],
+) -> Result<(), Vec<String>> {
+    let decision_variants: Vec<&str> = decisions.iter().map(|d| d.variant.as_str()).collect();
+    let orphans: Vec<String> = actions
+        .iter()
+        .filter(|da| !decision_variants.contains(&da.variant.as_str()))
+        .map(|da| da.variant.clone())
+        .collect();
+    if orphans.is_empty() {
+        Ok(())
+    } else {
+        Err(orphans)
+    }
 }

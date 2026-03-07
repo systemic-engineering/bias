@@ -22,10 +22,10 @@ impl Observable {
 /// Serialize an Observable to canonical form.
 /// Format: Observable(kind, source, sha)
 pub fn serialize(obs: &Observable) -> String {
-    todo!("implement Observable serialization")
+    format!("Observable({}, {}, {})", obs.kind, obs.source, obs.sha)
 }
 
 /// Compute the content hash for an Observable.
 pub fn hash(obs: &Observable) -> Sha {
-    todo!("implement Observable hashing")
+    sha::hash(&serialize(obs))
 }
