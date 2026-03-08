@@ -42,4 +42,4 @@ gleam test
 ## Licence
 
 `LICENSE.md` contains the Apache-2.0 licence required by Hex. The actual
-governing terms are the [Systemic Engineering License v1.0](REAL_LICENSE.md).
+governing terms are the [systemic.engineering License v1.0](REAL_LICENSE.md).
